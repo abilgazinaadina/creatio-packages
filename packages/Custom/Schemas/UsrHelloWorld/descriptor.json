@@ -1,0 +1,10 @@
+﻿{
+  "Descriptor": {
+    "UId": "c61e6996-e42a-4e16-956e-c3c08a1a3971",
+    "Name": "UsrHelloWorld",
+    "ModifiedOnUtc": "\/Date(1791360367000)\/",
+    "ManagerName": "SourceCodeSchemaManager",
+    "Caption": "Hello_world",
+    "DependsOn": []
+  }
+}
