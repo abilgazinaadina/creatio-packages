@@ -1,10 +1,10 @@
- namespace Terrasoft.Configuration
+  namespace Terrasoft.Configuration
 {
     public class UsrHelloWorld
     {
         public string GetMessage()
         {
-            return "Hello from Custom package";
+            return "Hello from Clio";
         }
     }
 }

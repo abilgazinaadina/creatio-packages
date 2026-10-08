@@ -1,0 +1,11 @@
+﻿{
+  "Descriptor": {
+    "UId": "aa32ab0a-bcf9-5e6b-8965-8538805f0563",
+    "Name": "MeDev",
+    "Type": 1,
+    "ModifiedOnUtc": "\/Date(1791362513000)\/",
+    "Maintainer": "Customer",
+    "ProjectPath": "Files/MeDev.csproj",
+    "DependsOn": []
+  }
+}
