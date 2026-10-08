@@ -4,7 +4,7 @@
     {
         public string GetMessage()
         {
-            return DoesNotExist;
+            return "Hello from CLIO";
         }
     }
 }
