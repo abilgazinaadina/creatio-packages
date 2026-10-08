@@ -1,0 +1,15 @@
+meta {
+  name: Login page is available
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/Login/Login.html
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+}

@@ -1,0 +1,16 @@
+meta {
+  name: Root redirects to login
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 302
+  res.headers.location: eq http://app:5000/Login/Login.html
+}
