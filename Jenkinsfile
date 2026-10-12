@@ -15,26 +15,26 @@ pipeline {
         }
 
         stage('Wait for Creatio') {
-           steps {
-        sh '''
-            echo "Waiting for Creatio..."
+            steps {
+                sh '''
+                    echo "Waiting for Creatio..."
 
-            for i in $(seq 1 30); do
-                if curl -fsS http://app:5000/Login/Login.html > /dev/null; then
-                    echo "Creatio is responding"
-                    sleep 10
-                    exit 0
-                fi
+                    for i in $(seq 1 30); do
+                        if curl -fsS http://app:5000/Login/Login.html > /dev/null; then
+                            echo "Creatio is responding"
+                            sleep 10
+                            exit 0
+                        fi
 
-                echo "Creatio is not ready yet..."
-                sleep 5
-            done
+                        echo "Creatio is not ready yet..."
+                        sleep 5
+                    done
 
-            echo "Creatio did not become ready"
-            exit 1
-        '''
-    }
-}
+                    echo "Creatio did not become ready"
+                    exit 1
+                '''
+            }
+        }
 
         stage('Configure clio') {
             steps {
@@ -55,10 +55,6 @@ pipeline {
             }
         }
 
-
-       
-        
-
         stage('Install packages') {
             steps {
                 sh 'clio push-workspace -e build'
@@ -66,61 +62,59 @@ pipeline {
         }
 
         stage('Wait after install') {
-           steps {
-        sh '''
-            echo "Waiting for Creatio..."
+            steps {
+                sh '''
+                    echo "Waiting for Creatio..."
 
-            for i in $(seq 1 30); do
-                if curl -fsS http://app:5000/Login/Login.html > /dev/null; then
-                    echo "Creatio is responding"
-                    sleep 10
-                    exit 0
-                fi
+                    for i in $(seq 1 30); do
+                        if curl -fsS http://app:5000/Login/Login.html > /dev/null; then
+                            echo "Creatio is responding"
+                            sleep 10
+                            exit 0
+                        fi
 
-                echo "Creatio is not ready yet..."
-                sleep 5
-            done
+                        echo "Creatio is not ready yet..."
+                        sleep 5
+                    done
 
-            echo "Creatio did not become ready"
-            exit 1
-        '''
-    }
-}
-
+                    echo "Creatio did not become ready"
+                    exit 1
+                '''
+            }
+        }
 
         stage('Compile') {
             steps {
-        sh '''
-            mkdir -p out
+                sh '''
+                    mkdir -p out
 
-            set +e
-            clio compile-configuration --all -e build
-            COMPILE_EXIT=$?
-            set -e
+                    set +e
+                    clio compile-configuration --all -e build
+                    COMPILE_EXIT=$?
+                    set -e
 
-            echo "clio exit code: $COMPILE_EXIT"
+                    echo "clio exit code: $COMPILE_EXIT"
 
-            sleep 5
+                    sleep 5
 
-            clio last-compilation-log -e build | tee out/compilation.log
+                    clio last-compilation-log -e build | tee out/compilation.log
 
-            if grep -q "Succeeded: True. Errors: 0" out/compilation.log; then
-                echo "Compilation actually succeeded"
-                exit 0
-            fi
+                    if grep -q "Succeeded: True. Errors: 0" out/compilation.log; then
+                        echo "Compilation actually succeeded"
+                        exit 0
+                    fi
 
-            echo "Compilation really failed"
-            exit 1
-        '''
-    }
-}
+                    echo "Compilation really failed"
+                    exit 1
+                '''
+            }
+        }
 
         stage('Smoke') {
             steps {
                 sh 'cd smoke && bru run --env ci -r'
             }
         }
-
 
         stage('Prepare image') {
             steps {
@@ -176,6 +170,8 @@ pipeline {
                 }
             }
         }
+    }
+
     post {
         failure {
             echo 'Сборка упала — смотри, на какой стадии'
