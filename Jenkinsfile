@@ -7,12 +7,14 @@ pipeline {
         buildDiscarder(logRotator(numToKeepStr: '30'))
     }
 
-       stage('Checkout') {
-         steps {
-           deleteDir()
-           checkout scm
-    }
-}
+    stages {
+
+        stage('Checkout') {
+            steps {
+                deleteDir()
+                checkout scm
+            }
+        }
 
         stage('Wait for Creatio') {
             steps {
