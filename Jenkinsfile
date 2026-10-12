@@ -150,8 +150,14 @@ pipeline {
         stage('Bake image') {
             steps {
                 script {
-                    def sha = env.GIT_COMMIT.take(8)
+                    def sha = sh(
+                        script: 'git rev-parse --short=8 HEAD',
+                        returnStdout: true
+                    ).trim()
+
                     def img = "localhost:5002/creatio-stand"
+
+                    echo "Image tag: ${sha}"
 
                     sh """
                         docker build \
