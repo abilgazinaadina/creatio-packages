@@ -16,6 +16,59 @@ pipeline {
             }
         }
 
+       stage('Allocate Redis DB') {
+         steps {
+           script {
+            def branch = sh(
+                script: 'git rev-parse --abbrev-ref HEAD',
+                returnStdout: true
+            ).trim()
+
+            def redisDb = sh(
+                script: """
+                    BRANCH='${branch}'
+                    CHECKSUM=\$(printf '%s' "\$BRANCH" | cksum | cut -d' ' -f1)
+                    REDIS_DB=\$(( CHECKSUM % 15 + 1 ))
+                    echo "\$REDIS_DB"
+                """,
+                returnStdout: true
+            ).trim()
+
+            env.REDIS_DB = redisDb
+
+            echo "Branch: ${branch}"
+            echo "Redis DB: ${redisDb}"
+        }
+    }
+}
+        stage('Check Redis DB collision') {
+            steps {
+                 script {
+                   def branch = sh(
+                     script: 'git rev-parse --abbrev-ref HEAD',
+                     returnStdout: true
+            ).trim()
+
+            sh """
+                touch redis-allocations.txt
+
+                echo "Checking Redis DB ${env.REDIS_DB} for branch ${branch}"
+
+                CONFLICT=\$(grep -E "=${env.REDIS_DB}\$" redis-allocations.txt | grep -v "^${branch}=" || true)
+
+                if [ -n "\$CONFLICT" ]; then
+                    echo "Redis DB collision detected!"
+                    echo "\$CONFLICT"
+                    exit 1
+                fi
+
+                echo "Redis DB ${env.REDIS_DB} is free"
+            """
+        }
+    }
+}
+
+
         stage('Wait for Creatio') {
             steps {
                 sh '''
@@ -117,6 +170,35 @@ pipeline {
                 sh 'cd smoke && bru run --env ci -r'
             }
         }
+
+        stage('Prepare DB snapshot') {
+          steps {
+           script {
+            def sha = sh(
+                script: 'git rev-parse --short=8 HEAD',
+                returnStdout: true
+            ).trim()
+
+            sh """
+                docker compose exec -T db psql -U postgres -d postgres -c "
+                    SELECT pg_terminate_backend(pid)
+                    FROM pg_stat_activity
+                    WHERE datname = 'creatio_ref'
+                      AND pid <> pg_backend_pid();
+                "
+
+                docker compose exec -T db psql -U postgres -d postgres -c "
+                    DROP DATABASE IF EXISTS creatio_snap_${sha};
+                "
+
+                docker compose exec -T db psql -U postgres -d postgres -c "
+                    CREATE DATABASE creatio_snap_${sha}
+                    TEMPLATE creatio_ref;
+                "
+            """
+        }
+    }
+}
 
         stage('Prepare image') {
             steps {
