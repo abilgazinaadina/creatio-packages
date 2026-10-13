@@ -180,21 +180,38 @@ pipeline {
             ).trim()
 
             sh """
-                docker compose exec -T db psql -U postgres -d postgres -c "
+                DB_CONTAINER=\$(docker ps -q \
+                  --filter "label=com.docker.compose.project=day1-stand" \
+                  --filter "label=com.docker.compose.service=db" \
+                  | head -n 1)
+
+                if [ -z "\$DB_CONTAINER" ]; then
+                    echo "PostgreSQL container not found"
+                    exit 1
+                fi
+
+                echo "Creating DB snapshot: creatio_snap_${sha}"
+
+                docker exec -i "\$DB_CONTAINER" \
+                  psql -U postgres -d postgres -c "
                     SELECT pg_terminate_backend(pid)
                     FROM pg_stat_activity
                     WHERE datname = 'creatio_ref'
                       AND pid <> pg_backend_pid();
-                "
+                  "
 
-                docker compose exec -T db psql -U postgres -d postgres -c "
+                docker exec -i "\$DB_CONTAINER" \
+                  psql -U postgres -d postgres -c "
                     DROP DATABASE IF EXISTS creatio_snap_${sha};
-                "
+                  "
 
-                docker compose exec -T db psql -U postgres -d postgres -c "
+                docker exec -i "\$DB_CONTAINER" \
+                  psql -U postgres -d postgres -c "
                     CREATE DATABASE creatio_snap_${sha}
                     TEMPLATE creatio_ref;
-                "
+                  "
+
+                echo "Snapshot creatio_snap_${sha} created"
             """
         }
     }
