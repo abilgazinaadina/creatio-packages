@@ -68,7 +68,9 @@ pipeline {
 
         stage('Install packages') {
             steps {
-                sh 'clio push-workspace -e build'
+                sh '''
+                    clio push-workspace -e build
+                '''
             }
         }
 
@@ -103,8 +105,11 @@ pipeline {
                     mkdir -p out
 
                     set +e
+
                     clio compile-configuration --all -e build
+
                     COMPILE_EXIT=$?
+
                     set -e
 
                     echo "clio exit code: $COMPILE_EXIT"
@@ -128,7 +133,10 @@ pipeline {
 
         stage('Smoke') {
             steps {
-                sh 'cd smoke && bru run --env ci -r'
+                sh '''
+                    cd smoke
+                    bru run --env ci -r
+                '''
             }
         }
 
@@ -142,40 +150,50 @@ pipeline {
                         returnStdout: true
                     ).trim()
 
-                    sh """
-                        DB_CONTAINER=\$(docker ps -q \
-                          --filter "label=com.docker.compose.project=day1-stand" \
-                          --filter "label=com.docker.compose.service=db" \
-                          | head -n 1)
 
-                        if [ -z "\$DB_CONTAINER" ]; then
-                            echo "PostgreSQL container not found"
-                            exit 1
-                        fi
+                    withEnv(["SNAPSHOT_SHA=${sha}"]) {
 
-                        echo "Creating DB snapshot: creatio_snap_${sha}"
+                        sh '''
+                            DB_CONTAINER=$(docker ps -q \
+                              --filter "label=com.docker.compose.project=day1-stand" \
+                              --filter "label=com.docker.compose.service=db" \
+                              | head -n 1)
 
-                        docker exec -i "\$DB_CONTAINER" \
-                          psql -U postgres -d postgres -c "
-                            SELECT pg_terminate_backend(pid)
-                            FROM pg_stat_activity
-                            WHERE datname = 'creatio_ref'
-                              AND pid <> pg_backend_pid();
-                          "
 
-                        docker exec -i "\$DB_CONTAINER" \
-                          psql -U postgres -d postgres -c "
-                            DROP DATABASE IF EXISTS creatio_snap_${sha};
-                          "
+                            if [ -z "$DB_CONTAINER" ]; then
+                                echo "PostgreSQL container not found"
+                                exit 1
+                            fi
 
-                        docker exec -i "\$DB_CONTAINER" \
-                          psql -U postgres -d postgres -c "
-                            CREATE DATABASE creatio_snap_${sha}
-                            TEMPLATE creatio_ref;
-                          "
 
-                        echo "Snapshot creatio_snap_${sha} created"
-                    """
+                            echo "Creating DB snapshot: creatio_snap_${SNAPSHOT_SHA}"
+
+
+                            docker exec -i "$DB_CONTAINER" \
+                              psql -U postgres -d postgres -c "
+                                SELECT pg_terminate_backend(pid)
+                                FROM pg_stat_activity
+                                WHERE datname = 'creatio_ref'
+                                  AND pid <> pg_backend_pid();
+                              "
+
+
+                            docker exec -i "$DB_CONTAINER" \
+                              psql -U postgres -d postgres -c "
+                                DROP DATABASE IF EXISTS creatio_snap_${SNAPSHOT_SHA};
+                              "
+
+
+                            docker exec -i "$DB_CONTAINER" \
+                              psql -U postgres -d postgres -c "
+                                CREATE DATABASE creatio_snap_${SNAPSHOT_SHA}
+                                TEMPLATE creatio_ref;
+                              "
+
+
+                            echo "Snapshot creatio_snap_${SNAPSHOT_SHA} created"
+                        '''
+                    }
                 }
             }
         }
@@ -189,22 +207,27 @@ pipeline {
                     rm -rf out/packages
                     mkdir -p out/packages
 
+
                     APP_CONTAINER=$(docker ps -q \
                       --filter "label=com.docker.compose.project=day1-stand" \
                       --filter "label=com.docker.compose.service=app" \
                       | head -n 1)
+
 
                     if [ -z "$APP_CONTAINER" ]; then
                         echo "Creatio app container not found"
                         exit 1
                     fi
 
+
                     docker cp \
                       "$APP_CONTAINER:/app/Terrasoft.Configuration/Pkg/MeDev" \
                       out/packages/
 
+
                     test -f \
                       out/packages/MeDev/Files/Bin/netstandard/MeDev.dll
+
 
                     echo "Compiled MeDev package prepared"
                 '''
@@ -221,9 +244,12 @@ pipeline {
                         returnStdout: true
                     ).trim()
 
+
                     def img = "localhost:5002/creatio-stand"
 
+
                     echo "Image tag: ${sha}"
+
 
                     sh """
                         docker build \
@@ -232,10 +258,19 @@ pipeline {
                           .
                     """
 
-                    sh "docker push ${img}:${sha}"
-                    sh "docker push ${img}:build-${env.BUILD_NUMBER}"
+
+                    sh """
+                        docker push ${img}:${sha}
+                    """
+
+
+                    sh """
+                        docker push ${img}:build-${env.BUILD_NUMBER}
+                    """
+
 
                     env.IMAGE_TAG = sha
+
 
                     sh """
                         echo "${img}:${sha}" > out/image.txt
@@ -258,13 +293,16 @@ pipeline {
 
                     def branch = env.BRANCH_NAME
 
+
                     if (!branch) {
                         branch = env.GIT_BRANCH
                     }
 
+
                     if (branch && branch.startsWith('origin/')) {
                         branch = branch.substring(7)
                     }
+
 
                     if (!branch || branch == 'HEAD') {
                         branch = 'master'
@@ -278,13 +316,13 @@ pipeline {
                     Branch:    ${branch}
                     Image tag: ${sha}
                     TTL:       24h
+
                     ----------------------------------------
                     """
 
 
                     build job: 'creatio-stand-deploy',
-                        wait: true,
-                        propagate: true,
+                        wait: false,
                         parameters: [
 
                             string(
@@ -302,6 +340,10 @@ pipeline {
                                 value: '24'
                             )
                         ]
+
+
+                    echo "Stand deployment job scheduled."
+                    echo "Main CI does not wait for it."
                 }
             }
         }
@@ -311,13 +353,21 @@ pipeline {
 
     post {
 
+        success {
+            echo 'CI completed successfully.'
+        }
+
+
         failure {
             echo 'Сборка упала — смотри, на какой стадии'
         }
 
+
         always {
-            archiveArtifacts artifacts: 'out/**',
-                             allowEmptyArchive: true
+            archiveArtifacts(
+                artifacts: 'out/**',
+                allowEmptyArchive: true
+            )
         }
     }
 }
