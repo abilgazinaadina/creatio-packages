@@ -1,0 +1,75 @@
+pipeline {
+    agent {
+        label 'docker'
+    }
+
+    parameters {
+        string(
+            name: 'BRANCH',
+            defaultValue: 'master',
+            description: 'Branch stand to delete'
+        )
+    }
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                deleteDir()
+
+                git branch: 'master',
+                    url: 'https://github.com/abilgazinaadina/creatio-packages.git'
+            }
+        }
+
+        stage('Show target') {
+            steps {
+                script {
+                    env.STAND_SLUG = sh(
+                        script: "sh ./scripts/slug.sh '${params.BRANCH}'",
+                        returnStdout: true
+                    ).trim()
+
+                    echo """
+                    ----------------------------------------
+                    Stand cleanup
+
+                    Branch:  ${params.BRANCH}
+                    Release: stand-${env.STAND_SLUG}
+                    ----------------------------------------
+                    """
+                }
+            }
+        }
+
+        stage('Delete stand') {
+            steps {
+                sh """
+                    sh ./scripts/delete-stand.sh '${params.BRANCH}'
+                """
+            }
+        }
+
+        stage('Check') {
+            steps {
+                sh '''
+                    echo "Remaining stands:"
+                    helm list -n stands
+
+                    echo
+                    kubectl get pods -n stands
+                '''
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "Stand for branch ${params.BRANCH} deleted."
+        }
+
+        failure {
+            echo "Stand cleanup failed."
+        }
+    }
+}
