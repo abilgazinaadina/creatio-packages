@@ -277,7 +277,52 @@ pipeline {
                 }
             }
         }
+    }  
+    stage('Deploy stand') {
+    steps {
+        script {
+            def sha = sh(
+                script: 'git rev-parse --short=8 HEAD',
+                returnStdout: true
+            ).trim()
+
+            def branch = env.BRANCH_NAME
+
+            if (!branch) {
+                branch = env.GIT_BRANCH ?: 'master'
+                branch = branch.replaceFirst(/^origin\//, '')
+            }
+
+            echo """
+            ----------------------------------------
+            Trigger stand deployment
+
+            Branch:    ${branch}
+            Image tag: ${sha}
+            TTL:       24h
+            ----------------------------------------
+            """
+
+            build job: 'creatio-stand-deploy',
+                wait: true,
+                propagate: true,
+                parameters: [
+                    string(
+                        name: 'BRANCH',
+                        value: branch
+                    ),
+                    string(
+                        name: 'IMAGE_TAG',
+                        value: sha
+                    ),
+                    string(
+                        name: 'TTL_HOURS',
+                        value: '24'
+                    )
+                ]
+        }
     }
+}
 
     post {
         failure {
