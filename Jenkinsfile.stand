@@ -80,13 +80,11 @@ pipeline {
                      * Получаем число 1..15.
                      */
                     env.REDIS_DB = sh(
-                        script: """
-                            echo -n '${env.STAND_SLUG}' \
-                            | cksum \
-                            | awk '{print (\$1 % 15) + 1}'
-                        """,
-                        returnStdout: true
-                    ).trim()
+                       script: """
+                           sh ./scripts/allocate-redis.sh '${env.RELEASE_NAME}'
+                    """,
+                    returnStdout: true
+                ).trim()
 
                     echo """
                     ----------------------------------------
