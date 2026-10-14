@@ -21,24 +21,24 @@ pipeline {
         }
 
 
-        stage('Wait for Creatio') {
+        stage('Wait for Build Creatio') {
             steps {
                 sh '''
-                    echo "Waiting for Creatio..."
+                    echo "Waiting for build Creatio..."
 
                     for i in $(seq 1 30); do
 
-                        if curl -fsS http://app:5000/Login/Login.html > /dev/null; then
-                            echo "Creatio is responding"
+                        if curl -fsS http://build-app:5000/Login/Login.html > /dev/null; then
+                            echo "Build Creatio is responding"
                             sleep 10
                             exit 0
                         fi
 
-                        echo "Creatio is not ready yet..."
+                        echo "Build Creatio is not ready yet..."
                         sleep 5
                     done
 
-                    echo "Creatio did not become ready"
+                    echo "Build Creatio did not become ready"
                     exit 1
                 '''
             }
@@ -47,6 +47,7 @@ pipeline {
 
         stage('Configure clio') {
             steps {
+
                 withCredentials([
                     usernamePassword(
                         credentialsId: 'creatio-build',
@@ -57,7 +58,7 @@ pipeline {
 
                     sh '''
                         clio reg-web-app build \
-                          -u http://app:5000 \
+                          -u http://build-app:5000 \
                           -l "$CREATIO_USER" \
                           -p "$CREATIO_PASSWORD"
                     '''
@@ -78,21 +79,21 @@ pipeline {
         stage('Wait after install') {
             steps {
                 sh '''
-                    echo "Waiting for Creatio..."
+                    echo "Waiting for build Creatio after package installation..."
 
                     for i in $(seq 1 30); do
 
-                        if curl -fsS http://app:5000/Login/Login.html > /dev/null; then
-                            echo "Creatio is responding"
+                        if curl -fsS http://build-app:5000/Login/Login.html > /dev/null; then
+                            echo "Build Creatio is responding"
                             sleep 10
                             exit 0
                         fi
 
-                        echo "Creatio is not ready yet..."
+                        echo "Build Creatio is not ready yet..."
                         sleep 5
                     done
 
-                    echo "Creatio did not become ready"
+                    echo "Build Creatio did not become ready"
                     exit 1
                 '''
             }
@@ -202,26 +203,26 @@ pipeline {
         stage('Prepare image') {
             steps {
                 sh '''
-                    echo "Preparing compiled package..."
+                    echo "Preparing compiled package from build-app..."
 
                     rm -rf out/packages
                     mkdir -p out/packages
 
 
-                    APP_CONTAINER=$(docker ps -q \
+                    BUILD_APP_CONTAINER=$(docker ps -q \
                       --filter "label=com.docker.compose.project=day1-stand" \
-                      --filter "label=com.docker.compose.service=app" \
+                      --filter "label=com.docker.compose.service=build-app" \
                       | head -n 1)
 
 
-                    if [ -z "$APP_CONTAINER" ]; then
-                        echo "Creatio app container not found"
+                    if [ -z "$BUILD_APP_CONTAINER" ]; then
+                        echo "Build Creatio container not found"
                         exit 1
                     fi
 
 
                     docker cp \
-                      "$APP_CONTAINER:/app/Terrasoft.Configuration/Pkg/MeDev" \
+                      "$BUILD_APP_CONTAINER:/app/Terrasoft.Configuration/Pkg/MeDev" \
                       out/packages/
 
 
@@ -281,7 +282,22 @@ pipeline {
         }
 
 
+        /*
+         * Временный Kubernetes stand создаём
+         * ТОЛЬКО для feature-веток.
+         *
+         * master проходит CI, но отдельный stand-master
+         * больше не создаётся.
+         */
         stage('Deploy stand') {
+
+            when {
+                expression {
+                    return env.BRANCH_NAME &&
+                           env.BRANCH_NAME != 'master'
+                }
+            }
+
             steps {
                 script {
 
@@ -292,21 +308,6 @@ pipeline {
 
 
                     def branch = env.BRANCH_NAME
-
-
-                    if (!branch) {
-                        branch = env.GIT_BRANCH
-                    }
-
-
-                    if (branch && branch.startsWith('origin/')) {
-                        branch = branch.substring(7)
-                    }
-
-
-                    if (!branch || branch == 'HEAD') {
-                        branch = 'master'
-                    }
 
 
                     echo """
@@ -321,6 +322,13 @@ pipeline {
                     """
 
 
+                    /*
+                     * wait:false важен.
+                     *
+                     * Основной CI освобождает единственный
+                     * docker-agent, после чего stand-deploy
+                     * сможет получить этот agent.
+                     */
                     build job: 'creatio-stand-deploy',
                         wait: false,
                         parameters: [
@@ -342,8 +350,8 @@ pipeline {
                         ]
 
 
-                    echo "Stand deployment job scheduled."
-                    echo "Main CI does not wait for it."
+                    echo "Stand deployment scheduled."
+                    echo "Main CI does not wait for stand deployment."
                 }
             }
         }
@@ -364,6 +372,7 @@ pipeline {
 
 
         always {
+
             archiveArtifacts(
                 artifacts: 'out/**',
                 allowEmptyArchive: true
