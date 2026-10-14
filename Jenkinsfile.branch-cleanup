@@ -1,0 +1,55 @@
+pipeline {
+
+    agent {
+        label 'docker'
+    }
+
+    triggers {
+        cron('H * * * *')
+    }
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                deleteDir()
+
+                git branch: 'master',
+                    url: 'https://github.com/abilgazinaadina/creatio-packages.git'
+            }
+        }
+
+        stage('Cleanup deleted branches') {
+            steps {
+                sh '''
+                    sh ./scripts/cleanup-deleted-branches.sh
+                '''
+            }
+        }
+
+        stage('Remaining stands') {
+            steps {
+                sh '''
+                    echo "Remaining Helm releases:"
+                    helm list -n stands
+
+                    echo
+
+                    echo "Remaining pods:"
+                    kubectl get pods -n stands
+                '''
+            }
+        }
+    }
+
+    post {
+
+        success {
+            echo 'Deleted branch cleanup completed.'
+        }
+
+        failure {
+            echo 'Deleted branch cleanup failed.'
+        }
+    }
+}
