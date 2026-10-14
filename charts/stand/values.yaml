@@ -1,0 +1,40 @@
+replicaCount: 1
+
+image:
+  repository: localhost:5002/creatio-stand
+  tag: "5d0f4a72"
+  pullPolicy: IfNotPresent
+
+branch: master
+ttlHours: 24
+
+service:
+  port: 80
+  targetPort: 5000
+
+gateway:
+  name: main
+  namespace: traefik
+
+route:
+  host: stand.localtest.me
+
+database:
+  host: postgres-external
+  port: 5432
+  name: stand_feature_42
+  user: postgres
+  password: postgres
+
+redis:
+  host: redis-external
+  port: 6379
+  database: 1
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: "2"
+    memory: 4Gi

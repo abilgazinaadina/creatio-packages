@@ -1,0 +1,9 @@
+apiVersion: v2
+
+name: stand
+description: Temporary Creatio branch stand
+
+type: application
+
+version: 0.1.0
+appVersion: "8.3.2"

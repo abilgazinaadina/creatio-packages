@@ -1,0 +1,98 @@
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    app: {{ .Release.Name }}
+    branch: {{ .Values.branch | quote }}
+
+spec:
+  replicas: {{ .Values.replicaCount }}
+
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}
+
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}
+        branch: {{ .Values.branch | quote }}
+
+    spec:
+      initContainers:
+        - name: prepare-connection-strings
+
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+
+          env:
+            - name: DB_HOST
+              value: {{ .Values.database.host | quote }}
+
+            - name: DB_PORT
+              value: {{ .Values.database.port | quote }}
+
+            - name: DB_NAME
+              value: {{ .Values.database.name | quote }}
+
+            - name: DB_USER
+              value: {{ .Values.database.user | quote }}
+
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-secrets
+                  key: db-password
+
+            - name: REDIS_HOST
+              value: {{ .Values.redis.host | quote }}
+
+            - name: REDIS_PORT
+              value: {{ .Values.redis.port | quote }}
+
+            - name: REDIS_DB
+              value: {{ .Values.redis.database | quote }}
+
+          command:
+            - /bin/sh
+            - -c
+            - |
+              cp /app/ConnectionStrings.config /work/ConnectionStrings.config
+
+              sed -i \
+                -e "s#<add name=\"db\" .*#<add name=\"db\" connectionString=\"Server=${DB_HOST};Port=${DB_PORT};Database=${DB_NAME};User ID=${DB_USER};password=${DB_PASSWORD};Timeout=500;CommandTimeout=400;MaxPoolSize=1024;\" />#" \
+                -e "s#<add name=\"redis\" .*#<add name=\"redis\" connectionString=\"host=${REDIS_HOST};db=${REDIS_DB};port=${REDIS_PORT};maxReadPoolSize=10;maxWritePoolSize=500\" />#" \
+                /work/ConnectionStrings.config
+
+              echo "ConnectionStrings.config prepared"
+
+              grep 'name="db"\|name="redis"' /work/ConnectionStrings.config \
+                | sed -E 's/(password=)[^;"]*/\1***/Ig'
+
+          volumeMounts:
+            - name: connection-strings
+              mountPath: /work
+
+      containers:
+        - name: creatio
+
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.targetPort }}
+
+          volumeMounts:
+            - name: connection-strings
+              mountPath: /app/ConnectionStrings.config
+              subPath: ConnectionStrings.config
+
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+
+      volumes:
+        - name: connection-strings
+          emptyDir: {}
