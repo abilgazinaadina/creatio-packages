@@ -1,0 +1,70 @@
+pipeline {
+    agent {
+        label 'docker'
+    }
+
+    /*
+     * Jenkins сам запускает этот job каждый час.
+     *
+     * Для задания можно потом заменить на ночной запуск,
+     * например H 3 * * *
+     */
+    triggers {
+        cron('H * * * *')
+    }
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                deleteDir()
+
+                git branch: 'master',
+                    url: 'https://github.com/abilgazinaadina/creatio-packages.git'
+            }
+        }
+
+
+        stage('Check Kubernetes') {
+            steps {
+                sh '''
+                    kubectl get nodes
+                    helm list -n stands
+                '''
+            }
+        }
+
+
+        stage('Cleanup expired stands') {
+            steps {
+                sh '''
+                    sh ./scripts/cleanup-expired.sh
+                '''
+            }
+        }
+
+
+        stage('Remaining stands') {
+            steps {
+                sh '''
+                    echo "Remaining Helm releases:"
+                    helm list -n stands
+
+                    echo
+                    echo "Remaining pods:"
+                    kubectl get pods -n stands
+                '''
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'TTL cleanup completed successfully.'
+        }
+
+        failure {
+            echo 'TTL cleanup failed.'
+        }
+    }
+}
