@@ -1,11 +1,11 @@
-apiVersion: apps/v1
+﻿apiVersion: apps/v1
 kind: Deployment
 
 metadata:
   name: {{ .Release.Name }}
   labels:
     app: {{ .Release.Name }}
-    branch: {{ .Values.branch | quote }}
+    branch: {{ .Release.Name | trimPrefix "stand-" | quote }}
 
 spec:
   replicas: {{ .Values.replicaCount }}
@@ -18,7 +18,7 @@ spec:
     metadata:
       labels:
         app: {{ .Release.Name }}
-        branch: {{ .Values.branch | quote }}
+        branch: {{ .Release.Name | trimPrefix "stand-" | quote }}
 
     spec:
       initContainers:
