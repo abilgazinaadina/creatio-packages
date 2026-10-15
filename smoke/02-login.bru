@@ -21,6 +21,16 @@ body:json {
     "UserPassword": "{{password}}"
   }
 }
+script:post-response {
+  const cookies = String(res.getHeader("set-cookie") || "");
+  const match = cookies.match(/BPMCSRF=([^;]+)/);
+
+  if (!match) {
+    throw new Error("BPMCSRF cookie was not returned by Creatio");
+  }
+
+  bru.setVar("bpmcsrf", match[1]);
+}
 
 tests {
   test("Authentication returns 200", function() {

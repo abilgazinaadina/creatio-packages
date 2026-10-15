@@ -5,13 +5,15 @@ meta {
 }
 
 get {
-  url: {{baseUrl}}/0/odata/Contact?$top=1&$select=Id
+  url: {{baseUrl}}/odata/Contact?$top=1&$select=Id
   body: none
   auth: none
 }
 
 headers {
+  Accept: application/json
   ForceUseSession: true
+  BPMCSRF: {{bpmcsrf}}
 }
 
 tests {
