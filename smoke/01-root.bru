@@ -1,15 +1,17 @@
 meta {
-  name: Creatio is available
+  name: Login page
   type: http
   seq: 1
 }
 
 get {
-  url: {{baseUrl}}/
+  url: {{baseUrl}}/Login/Login.html
   body: none
   auth: none
 }
 
-assert {
-  res.status: eq 200
+tests {
+  test("Login page returns 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
 }

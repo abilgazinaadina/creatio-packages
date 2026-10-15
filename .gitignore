@@ -19,3 +19,6 @@
 # We only keep en-US data
 **/data.??-??.json
 !**/data.en-US.json
+
+# Local container diagnostics and runtime snapshots.
+/.diagnostics/

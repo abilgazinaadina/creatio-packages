@@ -1,0 +1,32 @@
+meta {
+  name: OData
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/odata/SysSchema?$top=1&$select=Id
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+  ForceUseSession: true
+  BPMCSRF: {{bpmcsrf}}
+  Cookie: {{creatioCookies}}
+}
+
+tests {
+  test("OData returns 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("OData returns data", function() {
+    const body = res.getBody();
+
+    expect(body).to.have.property("value");
+    expect(body.value).to.be.an("array");
+    expect(body.value.length).to.be.greaterThan(0);
+  });
+}

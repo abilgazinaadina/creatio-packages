@@ -3,77 +3,69 @@ kind: Deployment
 
 metadata:
   name: {{ .Release.Name }}
+  namespace: {{ .Release.Namespace }}
+
   labels:
-    app: {{ .Release.Name }}
-    branch: {{ .Values.branch | quote }}
+    app: {{ .Release.Name | quote }}
+    branch: {{ .Release.Name | trimPrefix "stand-" | quote }}
 
 spec:
   replicas: {{ .Values.replicaCount }}
 
   selector:
     matchLabels:
-      app: {{ .Release.Name }}
+      app: {{ .Release.Name | quote }}
 
   template:
     metadata:
       labels:
-        app: {{ .Release.Name }}
-        branch: {{ .Values.branch | quote }}
+        app: {{ .Release.Name | quote }}
+        branch: {{ .Release.Name | trimPrefix "stand-" | quote }}
 
     spec:
+
       initContainers:
         - name: prepare-connection-strings
 
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
 
-          env:
-            - name: DB_HOST
-              value: {{ .Values.database.host | quote }}
-
-            - name: DB_PORT
-              value: {{ .Values.database.port | quote }}
-
-            - name: DB_NAME
-              value: {{ .Values.database.name | quote }}
-
-            - name: DB_USER
-              value: {{ .Values.database.user | quote }}
-
-            - name: DB_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Release.Name }}-secrets
-                  key: db-password
-
-            - name: REDIS_HOST
-              value: {{ .Values.redis.host | quote }}
-
-            - name: REDIS_PORT
-              value: {{ .Values.redis.port | quote }}
-
-            - name: REDIS_DB
-              value: {{ .Values.redis.database | quote }}
-
           command:
             - /bin/sh
             - -c
+
+          args:
             - |
-              cp /app/ConnectionStrings.config /work/ConnectionStrings.config
+              set -e
+
+              echo "Preparing ConnectionStrings.config..."
+
+              cp \
+                /app/ConnectionStrings.config \
+                /config/ConnectionStrings.config
 
               sed -i \
-                -e "s#<add name=\"db\" .*#<add name=\"db\" connectionString=\"Server=${DB_HOST};Port=${DB_PORT};Database=${DB_NAME};User ID=${DB_USER};password=${DB_PASSWORD};Timeout=500;CommandTimeout=400;MaxPoolSize=1024;\" />#" \
-                -e "s#<add name=\"redis\" .*#<add name=\"redis\" connectionString=\"host=${REDIS_HOST};db=${REDIS_DB};port=${REDIS_PORT};maxReadPoolSize=10;maxWritePoolSize=500\" />#" \
-                /work/ConnectionStrings.config
+                's#<add name="db".*#<add name="db" connectionString="Server={{ .Values.database.host }};Port={{ .Values.database.port }};Database={{ .Values.database.name }};User Id={{ .Values.database.user }};Password={{ .Values.database.password }};" />#' \
+                /config/ConnectionStrings.config
 
-              echo "ConnectionStrings.config prepared"
+              sed -i \
+                's#<add name="redis".*#<add name="redis" connectionString="host={{ .Values.redis.host }};db={{ .Values.redis.database }};port={{ .Values.redis.port }}" />#' \
+                /config/ConnectionStrings.config
 
-              grep 'name="db"\|name="redis"' /work/ConnectionStrings.config \
-                | sed -E 's/(password=)[^;"]*/\1***/Ig'
+              echo "ConnectionStrings.config prepared."
+
+          resources:
+            requests:
+              cpu: "10m"
+              memory: "16Mi"
+            limits:
+              cpu: "100m"
+              memory: "64Mi"
 
           volumeMounts:
-            - name: connection-strings
-              mountPath: /work
+            - name: config
+              mountPath: /config
+
 
       containers:
         - name: creatio
@@ -84,15 +76,17 @@ spec:
           ports:
             - name: http
               containerPort: {{ .Values.service.targetPort }}
+              protocol: TCP
 
           volumeMounts:
-            - name: connection-strings
+            - name: config
               mountPath: /app/ConnectionStrings.config
               subPath: ConnectionStrings.config
 
           resources:
-{{ toYaml .Values.resources | indent 12 }}
+            {{- toYaml .Values.resources | nindent 12 }}
+
 
       volumes:
-        - name: connection-strings
+        - name: config
           emptyDir: {}
