@@ -1,15 +1,42 @@
 meta {
-  name: Login page is available
+  name: Authentication
   type: http
   seq: 2
 }
 
-get {
-  url: {{baseUrl}}/Login/Login.html
-  body: none
+post {
+  url: {{baseUrl}}/ServiceModel/AuthService.svc/Login
+  body: json
   auth: none
 }
 
-assert {
-  res.status: eq 200
+headers {
+  Content-Type: application/json; charset=utf-8
+  ForceUseSession: true
+}
+
+body:json {
+  {
+    "UserName": "{{username}}",
+    "UserPassword": "{{password}}"
+  }
+}
+
+tests {
+  test("Authentication returns 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("Authentication succeeded", function() {
+    const body = res.getBody();
+
+    expect(body).to.have.property("Code");
+    expect(body.Code).to.equal(0);
+  });
+
+  test("Authentication creates session cookies", function() {
+    const cookies = String(res.getHeader("set-cookie") || "");
+
+    expect(cookies).to.contain("BPMCSRF");
+  });
 }
