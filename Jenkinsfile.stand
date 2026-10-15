@@ -1,97 +1,119 @@
 pipeline {
+
     agent {
-        label 'docker'
+        label 'docker-agent'
     }
 
+
     parameters {
+
         string(
             name: 'BRANCH',
-            defaultValue: 'master',
-            description: 'Git branch for the stand'
+            defaultValue: '',
+            description: 'Git branch for the temporary stand'
         )
 
         string(
             name: 'IMAGE_TAG',
             defaultValue: '',
-            description: 'Creatio image tag / Git SHA, for example 5d0f4a72'
+            description: 'Docker image tag / short commit SHA'
         )
 
         string(
             name: 'TTL_HOURS',
             defaultValue: '24',
-            description: 'How many hours the stand may live'
+            description: 'Stand lifetime in hours'
         )
     }
 
+
     environment {
+
+        REPOSITORY = 'https://github.com/abilgazinaadina/creatio-packages.git'
+
         NAMESPACE = 'stands'
+
         CHART = './charts/stand'
     }
 
+
     stages {
 
+
         stage('Checkout') {
+
             steps {
+
                 deleteDir()
 
-                git branch: "${params.BRANCH}",
-                    url: 'https://github.com/abilgazinaadina/creatio-packages.git'
+                git(
+                    branch: "${params.BRANCH}",
+                    url: "${env.REPOSITORY}"
+                )
             }
         }
 
 
         stage('Validate parameters') {
+
             steps {
+
                 script {
-                    if (!params.IMAGE_TAG?.trim()) {
-                        error('IMAGE_TAG is required')
+
+                    if (!params.BRANCH?.trim()) {
+                        error('BRANCH parameter is required')
                     }
 
-                    echo "Branch:    ${params.BRANCH}"
-                    echo "Image tag: ${params.IMAGE_TAG}"
-                    echo "TTL:       ${params.TTL_HOURS} hours"
+                    if (!params.IMAGE_TAG?.trim()) {
+                        error('IMAGE_TAG parameter is required')
+                    }
+
+                    if (!params.TTL_HOURS?.trim()) {
+                        error('TTL_HOURS parameter is required')
+                    }
+
+
+                    echo """
+Branch:    ${params.BRANCH}
+Image tag: ${params.IMAGE_TAG}
+TTL:       ${params.TTL_HOURS} hours
+"""
                 }
             }
         }
 
 
         stage('Prepare stand names') {
+
             steps {
+
                 script {
-                    env.STAND_SLUG = sh(
+
+                    env.SLUG = sh(
                         script: "sh ./scripts/slug.sh '${params.BRANCH}'",
                         returnStdout: true
                     ).trim()
 
-                    if (!env.STAND_SLUG) {
-                        error('Could not generate stand slug')
-                    }
 
-                    env.RELEASE_NAME = "stand-${env.STAND_SLUG}"
+                    env.RELEASE_NAME = "stand-${env.SLUG}"
 
-                    env.DB_NAME = "stand_" +
-                        env.STAND_SLUG.replace('-', '_')
+                    env.DB_NAME = "stand_${env.SLUG.replace('-', '_')}"
 
-                    env.HOST_NAME =
-                        "${env.STAND_SLUG}.localtest.me"
+                    env.HOST_NAME = "${env.SLUG}.localtest.me"
 
-                    /*
-                     * Временное автоматическое распределение Redis DB.
-                     * Получаем число 1..15.
-                     */
+
                     env.REDIS_DB = sh(
-                       script: """
-                           sh ./scripts/allocate-redis.sh '${env.RELEASE_NAME}'
-                    """,
-                    returnStdout: true
-                ).trim()
+                        script: "sh ./scripts/allocate-redis.sh '${env.RELEASE_NAME}'",
+                        returnStdout: true
+                    ).trim()
+
 
                     echo """
                     ----------------------------------------
                     Stand configuration
 
                     Branch:       ${params.BRANCH}
-                    Slug:         ${env.STAND_SLUG}
+                    Slug:         ${env.SLUG}
                     Release:      ${env.RELEASE_NAME}
                     Database:     ${env.DB_NAME}
                     Redis DB:     ${env.REDIS_DB}
@@ -106,17 +128,22 @@ pipeline {
 
 
         stage('Check Kubernetes') {
+
             steps {
-                sh '''
+
+                sh """
                     kubectl get nodes
-                    kubectl get namespace ${NAMESPACE}
-                '''
+
+                    kubectl get namespace '${env.NAMESPACE}'
+                """
             }
         }
 
 
         stage('Clone database') {
+
             steps {
+
                 sh """
                     sh ./scripts/clone-db.sh \
                       '${params.BRANCH}' \
@@ -127,7 +154,9 @@ pipeline {
 
 
         stage('Deploy stand') {
+
             steps {
+
                 sh """
                     helm upgrade --install '${env.RELEASE_NAME}' '${env.CHART}' \
                       --namespace '${env.NAMESPACE}' \
@@ -138,6 +167,7 @@ pipeline {
                       --set redis.database=${env.REDIS_DB} \
                       --set-string route.host='${env.HOST_NAME}' \
                       --set ttlHours=${params.TTL_HOURS} \
+                      --force-conflicts \
                       --wait \
                       --timeout 10m
                 """
@@ -146,56 +176,77 @@ pipeline {
 
 
         stage('Check deployment') {
+
             steps {
+
                 sh """
+                    echo "Checking deployment..."
+
+                    kubectl get deployment \
+                      '${env.RELEASE_NAME}' \
+                      -n '${env.NAMESPACE}'
+
+
+                    echo "Checking pods..."
+
                     kubectl get pods \
                       -n '${env.NAMESPACE}' \
-                      -l app='${env.RELEASE_NAME}'
+                      -l app='${env.RELEASE_NAME}' \
+                      -o wide
 
-                    kubectl get svc \
+
+                    echo "Waiting for rollout..."
+
+                    kubectl rollout status \
+                      deployment/'${env.RELEASE_NAME}' \
                       -n '${env.NAMESPACE}' \
-                      '${env.RELEASE_NAME}'
+                      --timeout=5m
+
+
+                    echo "Checking service..."
+
+                    kubectl get service \
+                      '${env.RELEASE_NAME}' \
+                      -n '${env.NAMESPACE}'
+
+
+                    echo "Checking HTTPRoute..."
 
                     kubectl get httproute \
-                      -n '${env.NAMESPACE}' \
-                      '${env.RELEASE_NAME}'
+                      '${env.RELEASE_NAME}' \
+                      -n '${env.NAMESPACE}'
                 """
             }
         }
+
     }
 
 
     post {
+
+
         success {
+
             echo """
-            ========================================
+----------------------------------------
+Stand deployed successfully
 
-            STAND CREATED
-
-            Branch:
-            ${params.BRANCH}
-
-            Release:
-            ${env.RELEASE_NAME}
-
-            Database:
-            ${env.DB_NAME}
-
-            Redis DB:
-            ${env.REDIS_DB}
-
-            URL:
-            http://${env.HOST_NAME}
-
-            TTL:
-            ${params.TTL_HOURS} hours
-
-            ========================================
-            """
+Branch:    ${params.BRANCH}
+Release:   ${env.RELEASE_NAME}
+Host:      http://${env.HOST_NAME}:8080
+Database:  ${env.DB_NAME}
+Redis DB:  ${env.REDIS_DB}
+Image tag: ${params.IMAGE_TAG}
+TTL:       ${params.TTL_HOURS}h
+----------------------------------------
+"""
         }
+
 
         failure {
+
             echo 'Stand deployment failed.'
         }
+
     }
 }
