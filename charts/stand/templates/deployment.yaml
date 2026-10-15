@@ -49,7 +49,7 @@ spec:
                 /config/ConnectionStrings.config
 
               sed -i \
-                's#<add name="redis".*#<add name="redis" connectionString="{{ .Values.redis.host }}:{{ .Values.redis.port }},db={{ .Values.redis.database }}" />#' \
+                's#<add name="redis".*#<add name="redis" connectionString="host={{ .Values.redis.host }};db={{ .Values.redis.database }};port={{ .Values.redis.port }}" />#' \
                 /config/ConnectionStrings.config
 
               echo "ConnectionStrings.config prepared."
