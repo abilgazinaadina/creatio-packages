@@ -207,6 +207,7 @@ pipeline {
 
                     rm -rf out/packages
                     mkdir -p out/packages
+                    rm -rf out/conf
 
 
                     BUILD_APP_CONTAINER=$(docker ps -q \
@@ -231,6 +232,17 @@ pipeline {
 
 
                     echo "Compiled MeDev package prepared"
+
+                    # Package DLLs alone do not include the runtime configuration.
+                    docker cp "$BUILD_APP_CONTAINER:/app/conf" out/conf
+
+                    CONFIG_VERSION=$(awk '/"ConfigurationAssemblyVersion"/ {gsub(/[^0-9]/,"",$0);print;exit}' out/conf/_MetaInfo.json)
+                    test -n "$CONFIG_VERSION"
+                    test -f "out/conf/bin/$CONFIG_VERSION/Terrasoft.Configuration.dll"
+                    test -f "out/conf/bin/$CONFIG_VERSION/Terrasoft.Configuration.ODataEntities.dll"
+                    test -f out/conf/runtime-data/db.sqlite
+
+                    echo "Runtime configuration version $CONFIG_VERSION prepared"
                 '''
             }
         }

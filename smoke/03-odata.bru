@@ -5,7 +5,7 @@ meta {
 }
 
 get {
-  url: {{baseUrl}}/odata/Contact?$top=1&$select=Id
+  url: {{baseUrl}}/odata/SysSchema?$top=1&$select=Id
   body: none
   auth: none
 }
@@ -14,6 +14,7 @@ headers {
   Accept: application/json
   ForceUseSession: true
   BPMCSRF: {{bpmcsrf}}
+  Cookie: {{creatioCookies}}
 }
 
 tests {

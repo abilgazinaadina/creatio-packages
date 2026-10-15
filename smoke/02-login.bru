@@ -21,15 +21,50 @@ body:json {
     "UserPassword": "{{password}}"
   }
 }
-script:post-response {
-  const cookies = String(res.getHeader("set-cookie") || "");
-  const match = cookies.match(/BPMCSRF=([^;]+)/);
 
-  if (!match) {
+script:post-response {
+  const raw = res.getHeader("set-cookie");
+
+  const cookies = Array.isArray(raw)
+    ? raw.join("\n")
+    : String(raw || "");
+
+  function getCookie(name) {
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const regex = new RegExp(escaped + "=([^;\\r\\n,]+)");
+    const match = cookies.match(regex);
+
+    return match ? match[1] : null;
+  }
+
+  const bpmcsrf = getCookie("BPMCSRF");
+  const aspxauth = getCookie(".ASPXAUTH");
+  const bpmloader = getCookie("BPMLOADER");
+  const userName = getCookie("UserName");
+
+  if (!bpmcsrf) {
     throw new Error("BPMCSRF cookie was not returned by Creatio");
   }
 
-  bru.setVar("bpmcsrf", match[1]);
+  bru.setVar("bpmcsrf", bpmcsrf);
+
+  const cookieHeader = [];
+
+  if (bpmloader) {
+    cookieHeader.push("BPMLOADER=" + bpmloader);
+  }
+
+  if (aspxauth) {
+    cookieHeader.push(".ASPXAUTH=" + aspxauth);
+  }
+
+  cookieHeader.push("BPMCSRF=" + bpmcsrf);
+
+  if (userName) {
+    cookieHeader.push("UserName=" + userName);
+  }
+
+  bru.setVar("creatioCookies", cookieHeader.join("; "));
 }
 
 tests {
